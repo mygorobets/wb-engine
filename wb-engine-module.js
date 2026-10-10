@@ -64,23 +64,25 @@ function devicesInit() {
 }
 
 function scriptsInit() {
-	log("wb-engine scriptsInit");
+    log("wb-engine scriptsInit");
+    if (!config['scripts']) return;
 
-	if (!config['scripts']) return;
-
-	config.scripts.forEach(function (script){
-		switch (script['script_type']) {
-			case 'thermostat':
-				scriptThermostatInit(script);
-				break;
-			case 'motion':
-				scriptMotionInit(script);
-				break;
-			case 'cover':
-				scriptCoverInit(script);
-				break;
-		}
-	});
+    config.scripts.forEach(function (script) {
+        switch (script['script_type']) {
+            case 'thermostat':
+                scriptThermostatInit(script);
+                break;
+            case 'hygrostat':
+                scriptHygrostatInit(script); // Новый тип
+                break;
+            case 'motion':
+                scriptMotionInit(script);
+                break;
+            case 'cover':
+                scriptCoverInit(script);
+                break;
+        }
+    });
 }
 
 function termosatLogic(id, stateChanged) {
