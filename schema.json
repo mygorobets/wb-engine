@@ -899,13 +899,15 @@
                     "watch": {
                         "humidity": "root.dict.humidity",
                         "humidity_state": "root.dict.humidity_state",
-                        "rel_humidity": "root.dict.rel_humidity"
+                        "rel_humidity": "root.dict.rel_humidity",
+                        "rel_humidity_state": "root.dict.rel_humidity_state"
                     },
                     "enumSource": [
                         {"source": [{"title": "Disabled", "value": "disabled"}], "title": "{{item.title}}", "value": "{{item.value}}"},
                         {"source": "humidity", "title": "{{item.title}}", "value": "{{item.value}}"},
                         {"source": "humidity_state", "title": "{{item.title}}", "value": "{{item.value}}"},
-                        {"source": "rel_humidity", "title": "{{item.title}}", "value": "{{item.value}}"}
+                        {"source": "rel_humidity", "title": "{{item.title}}", "value": "{{item.value}}"},
+                        {"source": "rel_humidity_state", "title": "{{item.title}}", "value": "{{item.value}}"}
                     ],
                     "default": "disabled",
                     "propertyOrder": 3,

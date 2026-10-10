@@ -390,8 +390,14 @@ function scriptHygrostatInit(script) {
 			inverted: false,
 			sensors: [],
 			sensorsErrors: [],
-			target: script['humidity_target'] || script['humidity_min'],
+			target: script['humidity_target'] || (typeof script['humidity_min'] == 'number' ? script['humidity_min'] : 30),
 			config: script
+		}
+		if (typeof scripts[id].config.humidity_min != 'number') {
+			scripts[id].config.humidity_min = 30;
+		}
+		if (typeof scripts[id].config.humidity_max != 'number') {
+			scripts[id].config.humidity_max = 70;
 		}
 		if (script['inverted_control'] === true) {
 			scripts[id].inverted = true;
