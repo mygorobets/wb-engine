@@ -364,8 +364,15 @@ function hygrostatLogic(id, stateChanged) {
 
 	var current_hum = hums[0];
 	if (hums.length > 1) {
-		current_hum = hums.reduce(function(x, y) { return x + y; });
-		current_hum = current_hum / hums.length;
+		// compact first: zones[0] == 'disabled' leaves a hole in hums[],
+		// reduce() skips holes but length counts them (upstream averaging bug)
+		var vals = hums.filter(function (v) { return typeof v == 'number'; });
+		if (vals.length > 1) {
+			current_hum = vals.reduce(function(x, y) { return x + y; });
+			current_hum = current_hum / vals.length;
+		} else if (vals.length == 1) {
+			current_hum = vals[0];
+		}
 	}
 
 	if (typeof current_hum != 'number') {
@@ -378,7 +385,10 @@ function hygrostatLogic(id, stateChanged) {
 }
 
 function scriptHygrostatInit(script) {
-	var id = "script_" + script['name'].fix();
+	// id must match wb-engine-helper fix(): re.sub('[^a-zA-Z0-9-]+', '_', name.lower()).
+	// the global String.fix() differs (keeps dots, maps each space separately), which
+	// splits the device id between the rules module and the helper for names like 'A.B'
+	var id = "script_" + script['name'].toLowerCase().replace(/[^a-z0-9-]+/g, '_');
 	var enable = id + "/enable";
 	var target = id + "/target";
 	var topic = '/devices/' + id + '/controls/';
