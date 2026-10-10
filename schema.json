@@ -497,6 +497,7 @@
             "headerTemplate" : "script_header_template",
             "oneOf": [
                 {"$ref": "#/definitions/thermostatScript"},
+                {"$ref": "#/definitions/hygrostatScript"},
                 {"$ref": "#/definitions/motionScript"},
                 {"$ref": "#/definitions/coverScript"}
             ],
@@ -712,6 +713,199 @@
                         {"source": [{"title": "Disabled", "value": "disabled"}], "title": "{{item.title}}", "value": "{{item.value}}"},
                         {"source": "temperature", "title": "{{item.title}}", "value": "{{item.value}}"},
                         {"source": "temperature_state", "title": "{{item.title}}", "value": "{{item.value}}"}
+                    ],
+                    "default": "disabled",
+                    "propertyOrder": 3,
+                    "options": {"grid_columns": 2}
+                },
+                "relay": {
+                    "type": "string",
+                    "title": "Switch Relay",
+                    "watch": {
+                        "switch": "root.dict.switch",
+                        "light": "root.dict.light"
+                    },
+                    "enumSource": [
+                        {"source": [{"title": "Disabled", "value": "disabled"}], "title": "{{item.title}}", "value": "{{item.value}}"},
+                        {"source": "switch", "title": "{{item.title}}", "value": "{{item.value}}"},
+                        {"source": "light", "title": "{{item.title}}", "value": "{{item.value}}"}
+                    ],
+                    "default": "disabled",
+                    "propertyOrder": 4,
+                    "options": {"grid_columns": 2}
+                }
+            }
+        },
+
+        "hygrostatScript": {
+            "_format": "grid",
+            "allOf": [
+                {"$ref": "#/definitions/hygrostatSettings"},
+                {"$ref": "#/definitions/commonScriptSettings"}
+            ],
+            "properties":  {
+                "script_type": {
+                    "title": "Script Type",
+                    "default": "hygrostat",
+                    "enum": ["hygrostat"],
+                    "options": {"hidden": true},
+                    "propertyOrder": 1,
+                    "type": "string"
+                }
+            },
+            "required": ["script_type"],
+            "options": {
+                "keep_oneof_values": false,
+                "wb": {"disable_panel": true}
+            },
+            "title": "Hygrostat",
+            "type": "object"
+        },
+        "hygrostatSettings": {
+            "_format": "grid",
+            "title": "Hygrostat",
+            "type": "object",
+            "properties":  {
+                "hass_enabled": {
+                    "_format": "checkbox",
+                    "default": false,
+                    "options": {
+                        "grid_columns": 12
+                    },
+                    "propertyOrder": 20,
+                    "title": "Add Script to HomeAssistant",
+                    "type": "boolean"
+                },
+                "device_name": {
+                    "type": "string",
+                    "title": "Device name",
+                    "default": "default",
+                    "propertyOrder": 21,
+                    "options": {
+                        "dependencies": {
+                            "hass_enabled": true
+                        },
+                        "grid_columns": 12
+                    },
+                    "watch": {
+                        "areas": "root.areas"
+                    },
+                    "enumSource": [
+                        {"source": [{"title": "Default", "value": "default"}], "title": "{{item.title}}", "value": "{{item.value}}"},
+                        {"source": "areas", "title": "{{item.title}}", "value": "{{item.name}}"}
+                    ]
+                },
+                "mode": {
+                    "type": "string",
+                    "title": "Work mode",
+                    "propertyOrder": 22,
+                    "default": "humidifier",
+                    "options": {
+                        "grid_columns": 6
+                    },
+                    "watch": {
+                        "humidifier_modes": "root.dict.humidifier_modes"
+                    },
+                    "enumSource": [
+                        {"source": "humidifier_modes", "title": "{{item}}", "value": "{{item}}"}
+                    ]
+                },
+                "inverted_control": {
+                    "_format": "checkbox",
+                    "default": false,
+                    "options": {
+                        "grid_columns": 6
+                    },
+                    "propertyOrder": 23,
+                    "title": "Relay inverted control",
+                    "type": "boolean"
+                },
+                "humidity_target": {
+                    "options": {
+                        "grid_columns": 2
+                    },
+                    "default": 50,
+                    "propertyOrder": 40,
+                    "title": "Target humidity",
+                    "type": "integer"
+                },
+                "humidity_min": {
+                    "options": {
+                        "grid_columns": 2
+                    },
+                    "default": 30,
+                    "propertyOrder": 40,
+                    "title": "Minimum humidity",
+                    "type": "integer"
+                },
+                "humidity_max": {
+                    "options": {
+                        "grid_columns": 2
+                    },
+                    "default": 70,
+                    "propertyOrder": 50,
+                    "title": "Maximum humidity",
+                    "type": "integer"
+                },
+                "hysteresis": {
+                    "options": {
+                        "grid_columns": 2
+                    },
+                    "default": 3,
+                    "propertyOrder": 60,
+                    "title": "Hysteresis",
+                    "type": "number"
+                },
+                "zones": {
+                    "format": "table",
+                    "items": {
+                        "$ref": "#/definitions/hygrostatZoneSettings"
+                    },
+                    "options": {
+                        "grid_columns": 12,
+                        "array_controls_top": true,
+                        "disable_array_delete_last_row": true,
+                        "disable_array_reorder": true,
+                        "disable_collapse": true,
+                        "enable_array_copy": false,
+                        "wb": {"disable_panel": true}
+                    },
+                    "propertyOrder": 70,
+                    "headerTemplate": "Hygrostat zones",
+                    "title": "Zones",
+                    "type": "array"
+                }
+            },
+            "options": {
+                "wb": {"disable_panel": true}
+            },
+            "defaultProperties": ["script_type", "enabled", "hass_enabled", "device_name", "mode", "inverted_control", "name", "title", "humidity_target", "humidity_min", "humidity_max", "hysteresis", "zones"]
+        },
+        "hygrostatZoneSettings": {
+            "title": "Zone",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "title": "Name",
+                    "propertyOrder": 2,
+                    "options": {
+                        "grid_columns": 1,
+                        "inputAttributes": {"placeholder":  "(optional)"}
+                    }
+                },
+                "sensor": {
+                    "type": "string",
+                    "title": "Humidity Sensor",
+                    "watch": {
+                        "humidity": "root.dict.humidity",
+                        "humidity_state": "root.dict.humidity_state",
+                        "rel_humidity": "root.dict.rel_humidity"
+                    },
+                    "enumSource": [
+                        {"source": [{"title": "Disabled", "value": "disabled"}], "title": "{{item.title}}", "value": "{{item.value}}"},
+                        {"source": "humidity", "title": "{{item.title}}", "value": "{{item.value}}"},
+                        {"source": "humidity_state", "title": "{{item.title}}", "value": "{{item.value}}"},
+                        {"source": "rel_humidity", "title": "{{item.title}}", "value": "{{item.value}}"}
                     ],
                     "default": "disabled",
                     "propertyOrder": 3,

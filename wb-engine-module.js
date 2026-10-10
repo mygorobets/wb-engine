@@ -64,25 +64,26 @@ function devicesInit() {
 }
 
 function scriptsInit() {
-    log("wb-engine scriptsInit");
-    if (!config['scripts']) return;
+	log("wb-engine scriptsInit");
 
-    config.scripts.forEach(function (script) {
-        switch (script['script_type']) {
-            case 'thermostat':
-                scriptThermostatInit(script);
-                break;
-            case 'hygrostat':
-                scriptHygrostatInit(script); // Новый тип
-                break;
-            case 'motion':
-                scriptMotionInit(script);
-                break;
-            case 'cover':
-                scriptCoverInit(script);
-                break;
-        }
-    });
+	if (!config['scripts']) return;
+
+	config.scripts.forEach(function (script){
+		switch (script['script_type']) {
+			case 'thermostat':
+				scriptThermostatInit(script);
+				break;
+			case 'hygrostat':
+				scriptHygrostatInit(script);
+				break;
+			case 'motion':
+				scriptMotionInit(script);
+				break;
+			case 'cover':
+				scriptCoverInit(script);
+				break;
+		}
+	});
 }
 
 function termosatLogic(id, stateChanged) {
@@ -274,6 +275,218 @@ function scriptThermostatInit(script) {
 	});
 
 	termosatLogic(id);
+}
+
+function hygrostatLogic(id, stateChanged) {
+	var topic = '/devices/' + id + '/controls/';
+	var hums = [];
+	var relays = 0;
+	var inverted = scripts[id].inverted;
+	var hysteresis = (typeof scripts[id].config.hysteresis == 'number') ? scripts[id].config.hysteresis : 3;
+
+	if (typeof stateChanged === "undefined") {
+		stateChanged = false;
+	}
+
+	scripts[id].config.zones.forEach(function (zone, idx){
+		if (zone.sensor == 'disabled' || zone.relay == 'disabled') {
+			return;
+		}
+
+		var zoneName = 'zone' + (idx + 1);
+		var hum = dev[zone.sensor];
+		var humError = (dev[zone.sensor+"#error"] == undefined) ? false : true;
+		var relay = dev[zone.relay];
+
+		if (!hum) {
+			hum = 0.0;
+			humError = true;
+		}
+
+		if (scripts[id].state == 'off' || humError) {
+			// turn off
+			relay = inverted;
+		} else {
+			if (scripts[id].mode == 'dehumidifier') {
+				// dehumidifier (same logic as thermostat 'cool'):
+					// humidity too high -> dry, humidity reached -> stop
+				if (hum >= (scripts[id].target + hysteresis)) {
+					// turn on
+					relay = !inverted;
+				} else if (hum <= (scripts[id].target - hysteresis)) {
+					// turn off
+					relay = inverted;
+				}
+			} else {
+				// humidifier (same logic as thermostat 'heat'):
+					// humidity too low -> humidify, humidity reached -> stop
+				if (hum >= (scripts[id].target + hysteresis)) {
+					// turn off
+					relay = inverted;
+				} else if (hum <= (scripts[id].target - hysteresis)) {
+					// turn on
+					relay = !inverted;
+				}
+			}
+		}
+
+		if (relay != inverted) {
+			// relay is on
+			relays++;
+		}
+
+		var status = zoneName + '_status';
+		var relay_status = zoneName + '_relay_status';
+
+		hums[idx] = hum;
+		publish(topic + status, hums[idx], 0, true);
+
+		if (!(scripts[id].state == 'off' && stateChanged == false)) {
+			dev[zone.relay] = relay;
+			publish(topic + relay_status, (relay) ? 1 : 0, 0, true);
+		}
+
+		if (dev[id + '/' + status + '#error'] || humError) {
+			publish(topic + status + '/meta/error', (humError) ? 'r' : '', 0, true);
+		}
+	});
+
+	if (scripts[id].state != 'off') {
+		if (relays > 0) {
+			// Home Assistant MQTT humidifier action_topic accepts only
+			// 'off', 'humidifying', 'drying', 'idle' - so the dehumidifier
+			// working state must be published as 'drying', not 'dehumidifying'
+			scripts[id].state = (scripts[id].mode == 'dehumidifier') ? 'drying' : 'humidifying';
+		} else {
+			scripts[id].state = 'idle';
+		}
+	}
+
+	var current_hum = hums[0];
+	if (hums.length > 1) {
+		current_hum = hums.reduce(function(x, y) { return x + y; });
+		current_hum = current_hum / hums.length;
+	}
+
+	if (typeof current_hum != 'number') {
+		current_hum = 0;
+	}
+
+	publish(topic + 'current', current_hum.round(1), 0, true);
+	publish(topic + 'mode', scripts[id].mode, 0, true);
+	publish(topic + 'state', scripts[id].state, 0, true);
+}
+
+function scriptHygrostatInit(script) {
+	var id = "script_" + script['name'].fix();
+	var enable = id + "/enable";
+	var target = id + "/target";
+	var topic = '/devices/' + id + '/controls/';
+
+	if (typeof scripts[id] == 'undefined') {
+		scripts[id] = {
+			state: 'off',
+			mode: script['mode'] || 'humidifier',
+			inverted: false,
+			sensors: [],
+			sensorsErrors: [],
+			target: script['humidity_target'] || script['humidity_min'],
+			config: script
+		}
+		if (script['inverted_control'] === true) {
+			scripts[id].inverted = true;
+		}
+	}
+
+	if (dev[target]) {
+		scripts[id].target = dev[target];
+	}
+
+	publish(topic + 'target', scripts[id].target, 0, true);
+	publish(topic + 'mode', scripts[id].mode, 0, true);
+
+	if (dev[enable] || script.enabled) {
+		// script enabled
+		scripts[id].state = 'idle';
+		publish(topic + 'enable', 1, 0, true);
+	} else {
+		// script disabled
+		scripts[id].state = 'off';
+		publish(topic + 'enable', 0, 0, true);
+	}
+
+	publish(topic + 'state', scripts[id].state, 0, true);
+
+	log('wb-engine scriptHygrostatInit[{}]: mode={}, state={}, target={}', id, scripts[id].mode, scripts[id].state, scripts[id].target);
+
+	trackMqtt('/devices/' + id + '/controls/+/on', function(msg){
+		publish(msg.topic.replace('/on', ''), msg.value, 0, true);
+	});
+
+	trackMqtt('/devices/' + id + '/controls/mode/set', function(msg){
+		if (msg.value == 'off') {
+			scripts[id].state = 'off';
+			publish(topic + 'enable', 0, 0, true);
+		} else {
+			if (msg.value == 'humidifier' || msg.value == 'dehumidifier') {
+				// unlike thermostat, hygrostat switches its mode at run time:
+				// Home Assistant publishes the selected mode to mode_command_topic
+				scripts[id].mode = msg.value;
+				publish(topic + 'mode', scripts[id].mode, 0, true);
+			}
+			scripts[id].state = 'idle';
+			publish(topic + 'enable', 1, 0, true);
+		}
+		hygrostatLogic(id, true)
+	});
+
+	script.zones.forEach(function (zone, idx){
+		if (zone.sensor == 'disabled' || zone.relay == 'disabled') {
+			return;
+		}
+
+		zoneid = idx + 1;
+		scripts[id].sensors[idx] = zone.sensor;
+		scripts[id].sensorsErrors[idx] = zone.sensor + "#error";
+	});
+
+	defineRule(id + ".sensor-rule", {
+		whenChanged: scripts[id].sensors,
+		then: function (value, devName, cellName) {
+			hygrostatLogic(id)
+		}
+	});
+
+	defineRule(id + ".error-rule", {
+		whenChanged: scripts[id].sensorsErrors,
+		then: function (value, devName, cellName) {
+			hygrostatLogic(id)
+		}
+	});
+
+	defineRule(id + ".on-off-rule", {
+		whenChanged: enable,
+		then: function (value, devName, cellName) {
+			scripts[id].state = (value === true) ? 'idle' : 'off';
+			hygrostatLogic(id, true)
+		}
+	});
+
+	defineRule(id + ".target-rule", {
+		whenChanged: target,
+		then: function (value, devName, cellName) {
+			if (value < scripts[id].config['humidity_min']) {
+				value = scripts[id].config['humidity_min']
+			}
+			if (value > scripts[id].config['humidity_max']) {
+				value = scripts[id].config['humidity_max']
+			}
+			scripts[id].target = value;
+			hygrostatLogic(id)
+		}
+	});
+
+	hygrostatLogic(id);
 }
 
 function motionLogicTimer(id) {

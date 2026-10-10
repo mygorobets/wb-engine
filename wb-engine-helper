@@ -242,6 +242,7 @@ def toJson():
     config_temp['dict'] = {}
     config_temp['dict']['cover_class'] = ['awning', 'blind', 'curtain', 'damper', 'door', 'garage', 'gate', 'shade', 'shutter', 'window']
     config_temp['dict']['thermostat_modes'] = ['heat', 'cool']
+    config_temp['dict']['humidifier_modes'] = ['humidifier', 'dehumidifier']
 
     for key, script in enumerate(config_temp['scripts']):
         if (config_temp['scripts'][key]['script_type'] == 'cover'):
@@ -254,6 +255,17 @@ def toJson():
                 config_temp['scripts'][key]['mode'] = 'heat'
             if ('temperature_target' not in config_temp['scripts'][key]):
                 config_temp['scripts'][key]['temperature_target'] = config_temp['scripts'][key]['temperature_min']
+        if (config_temp['scripts'][key]['script_type'] == 'hygrostat'):
+            if ('device_name' not in config_temp['scripts'][key]):
+                config_temp['scripts'][key]['device_name'] = 'default'
+            if ('hass_enabled' not in config_temp['scripts'][key]):
+                config_temp['scripts'][key]['hass_enabled'] = False
+            if ('mode' not in config_temp['scripts'][key]):
+                config_temp['scripts'][key]['mode'] = 'humidifier'
+            if ('inverted_control' not in config_temp['scripts'][key]):
+                config_temp['scripts'][key]['inverted_control'] = False
+            if ('humidity_target' not in config_temp['scripts'][key]):
+                config_temp['scripts'][key]['humidity_target'] = config_temp['scripts'][key]['humidity_min']
 
     for key in sorted(devices.keys()):
         device = devices[key]
@@ -758,6 +770,136 @@ def initScriptThermostat(script):
 
     wbAddDevice(device_id, device)
 
+def initScriptHygrostat(script):
+    device = {'meta': {}, 'controls': {}}
+
+    device_id = 'script_' + fix(script['name'].lower())
+    device_title = script['title'] if 'title' in script else script['name']
+    device['meta']['name'] = device_title
+    device['meta']['title'] = {'en': device_title}
+    device['meta']['driver'] = 'wb-engine'
+    device['controls'] = {}
+
+    device['controls']['enable'] = {
+        'title': {'en': 'Enable', 'ru': 'Enable'},
+        'readonly': False,
+        'type': 'switch',
+        'order': 10,
+        'default': 0
+    }
+
+    device['controls']['state'] = {
+        'title': {'en': 'Action State', 'ru': 'State'},
+        'type': 'text',
+        'readonly': True,
+        'order': 15,
+        'default': 'off'
+    }
+
+    device['controls']['mode'] = {
+        'title': {'en': 'Mode', 'ru': 'Mode'},
+        'type': 'text',
+        'readonly': True,
+        'order': 17,
+        'default': script['mode']
+    }
+
+    device['controls']['current'] = {
+        'title': {'en': 'Current Humidity', 'ru': 'Current Humidity'},
+        'type': 'rel_humidity',
+        'readonly': True,
+        'order': 16,
+        'default': 0
+    }
+
+    device['controls']['target'] = {
+        'title': {'en': 'Target Humidity', 'ru': 'Target Humidity'},
+        'min': script['humidity_min'],
+        'max': script['humidity_max'],
+        'readonly': False,
+        'type': 'range',
+        'order': 20,
+        'default': script['humidity_min']
+    }
+
+    order1 = 30
+    order2 = 50
+
+    for idx, zone in enumerate(script['zones']):
+        if (zone['sensor'] == 'disabled' or zone['relay'] == 'disabled'): continue
+
+        title1 = "Zone Humidity"
+        title2 = "Zone Relay Status"
+        if (zone['name'] != ""):
+            title1 = zone['name'] + " Humidity"
+            title2 = zone['name'] + " Relay Status"
+        else:
+            if (len(script['zones']) > 1):
+                title1 = "Zone " + str(idx + 1) + " Humidity"
+                title2 = "Zone " + str(idx + 1) + " Relay Status"
+
+        control_id1 = 'zone' + str(idx+1) + '_status'
+        device['controls'][control_id1] = {
+            'title': {'en': title1, 'ru': title1},
+            'type': 'rel_humidity',
+            'readonly': True,
+            'order': order1,
+            'default': 0
+        }
+
+        control_id2 = 'zone' + str(idx+1) + '_relay_status'
+        device['controls'][control_id2] = {
+            'title': {'en': title2, 'ru': title2},
+            'type': 'switch',
+            'readonly': True,
+            'order': order2,
+            'default': 0
+        }
+
+        order1 = order1 + 1
+        order2 = order2 + 1
+
+    if ('hass_enabled' in script and script['hass_enabled']):
+        hass = {
+            'device': {
+                "identifiers": device_id,
+                "manufacturer": "WirenBoard",
+                "model": "hygrostat [wb-engine]",
+                "name": device_title
+            },
+            'name': device_title,
+            'unique_id': device_id,
+            'default_entity_id': 'humidifier.' + device_id,
+            'device_class': ('dehumidifier' if script['mode'] == 'dehumidifier' else 'humidifier'),
+            'modes': ['humidifier', 'dehumidifier'],
+            'min_humidity': script['humidity_min'],
+            'max_humidity': script['humidity_max'],
+            'state_topic': wb_topic_prefix + 'devices/' + device_id + '/controls/enable',
+            'command_topic': wb_topic_prefix + 'devices/' + device_id + '/controls/enable/on',
+            'payload_on': 1,
+            'payload_off': 0,
+            'action_topic': wb_topic_prefix + 'devices/' + device_id + '/controls/state',
+            'current_humidity_topic': wb_topic_prefix + 'devices/' + device_id + '/controls/current',
+            'target_humidity_state_topic': wb_topic_prefix + 'devices/' + device_id + '/controls/target',
+            'target_humidity_command_topic': wb_topic_prefix + 'devices/' + device_id + '/controls/target/on',
+            'mode_state_topic': wb_topic_prefix + 'devices/' + device_id + '/controls/mode',
+            'mode_command_topic': wb_topic_prefix + 'devices/' + device_id + '/controls/mode/set'
+        }
+
+        if ('device_name' in script):
+            area = getByName(config['areas'], script['device_name'])
+            if (area):
+                hass['device']['model'] = 'wb-engine custom device'
+                hass['device']['identifiers'] = area['name']
+                hass['device']['name'] = area['title']
+                hass['device']['suggested_area'] = area['title']
+
+        hass_topic = ['humidifier', prefix(wb_id) + fix(device_id), 'humidifier', 'config']
+        hassToYaml(True, hass, hass_topic)
+        hassPublish(True, hass, hass_topic)
+
+    wbAddDevice(device_id, device)
+
 def initScriptMotion(script):
     device = {'meta': {}, 'controls': {}}
 
@@ -914,6 +1056,8 @@ def initScripts():
     for script in config['scripts']:
         if script['script_type'] == 'thermostat':
             initScriptThermostat(script)
+        if script['script_type'] == 'hygrostat':
+            initScriptHygrostat(script)
         if script['script_type'] == 'motion':
             initScriptMotion(script)
         if script['script_type'] == 'cover':
